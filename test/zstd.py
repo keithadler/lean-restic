@@ -51,6 +51,15 @@ with tempfile.TemporaryDirectory() as tmp:
                     open(os.path.join(here, tag + ".zst"), "wb").write(open(comp, "rb").read())
             frames.append(open(comp, "rb").read())
     print(f"{ok} of {ok + bad} frames decoded exactly")
+    # Frames the reference decoder rejects, found by the corruption test below: each must be refused.
+    inv_dir = os.path.join(here, "zstd-invalid")
+    for name in sorted(os.listdir(inv_dir)):
+        r = subprocess.run([exe, os.path.join(inv_dir, name)], capture_output=True)
+        if r.returncode == 1:
+            print(f"refused  {name}: {r.stderr.decode().strip()}")
+        else:
+            bad += 1
+            print(f"ACCEPTED {name}, which the reference decoder rejects")
     # Corruption: flip bytes; the decoder must refuse or agree with zstd, and never crash.
     crashes = disagree = refused = 0
     for _ in range(int(os.environ.get("CORRUPT", "400"))):

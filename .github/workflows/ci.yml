@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install elan
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Install restic 0.19.1 and zstd
+        run: |
+          curl -sSfL -o restic.bz2 https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_linux_amd64.bz2
+          bunzip2 restic.bz2
+          chmod +x restic
+          sudo mv restic /usr/local/bin/restic
+          restic version
+          sudo apt-get install -y zstd
+
+      - name: Build (proofs, kernel-checked vectors, CLI, test tools)
+        run: lake build Restic lean-restic vectors unzstd jsoncheck
+
+      - name: Axioms (no native_decide, no bv_decide)
+        run: |
+          lake env lean test/Axioms.lean | tee axioms.txt
+          ! grep -q ofReduceBool axioms.txt
+
+      - name: Vectors too large for the kernel (scrypt)
+        run: .lake/build/bin/vectors
+
+      - name: zstd against the reference tool
+        run: CORRUPT=400 python3 test/zstd.py
+
+      - name: JSON against Python
+        run: python3 test/json_diff.py
+
+      - name: Whole program against restic
+        run: |
+          test/make-repo.sh
+          test/check.sh
+
+      - name: Tampered packs are refused
+        run: python3 test/tamper.py

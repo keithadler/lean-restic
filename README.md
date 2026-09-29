@@ -54,6 +54,8 @@ differentially:
   and refuses 253 malformed ones.
 * **scrypt** (RFC 7914), to turn the password into a key: RFC 7914 §12 vectors, compiled
   (`test/vectors`), and every real restic key file in the tests.
+* **Invalid zstd frames**: `test/zstd-invalid/` holds three frames the reference decoder rejects (a
+  reserved header bit, a block over the maximum size, leftover sequence bits); each must be refused.
 * **The whole program against restic**: `test/check.sh` makes format 1 and 2 repositories with restic
   (a 12 MB multi-chunk file, Unicode names, 200 small files, an incremental snapshot) and compares
   config, snapshots, indexes, `check`, password unlocking and every restore with restic's.
@@ -113,7 +115,8 @@ Restic/Zstd.lean      zstd decompression
 Restic/Json.lean      JSON
 Restic/Repo.lean      files, index, blobs, trees, key files
 Main.lean             the command line
-test/                 make-repo.sh, check.sh, tamper.py, zstd.py, json_diff.py, vectors
+test/                 make-repo.sh, check.sh, tamper.py, zstd.py, zstd-invalid/, json_diff.py, vectors, Axioms.lean
+.github/workflows/    CI: every test above on Linux, against restic 0.19.1
 ```
 
 ## License
