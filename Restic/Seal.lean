@@ -69,6 +69,8 @@ inductive OpenError where
   | unauthenticated
   deriving Repr, DecidableEq
 
+deriving instance DecidableEq for Except
+
 /-- Read `IV ‖ CIPHERTEXT ‖ MAC`: check the MAC, then decrypt (restic's `Open`). -/
 def openBlob (k : MasterKey) (c : Bytes) : Except OpenError Bytes :=
   if !k.valid then .error .invalidKey
