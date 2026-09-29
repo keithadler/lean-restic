@@ -3,7 +3,7 @@
 
 RFC 8259, enough of it to read what restic writes: snapshots, indexes, trees and key files, all
 produced by Go's `encoding/json`. Like the zstd decoder this is tested rather than proved: it is total
-(recursion is bounded by fuel, so malformed input is an error, never a hang), and `test/json.py`
+(recursion is bounded by fuel, so malformed input is an error, never a hang), and `test/json_diff.py`
 compares it with Python's `json` module.
 
 Numbers are kept as their text and read as integers where restic stores integers.
@@ -48,13 +48,14 @@ def strBody (acc : Array Char) : List Char → M (String × List Char)
       let some lo := hex4 e f g h | throw "bad \\u escape"
       if 0xDC00 ≤ lo ∧ lo < 0xE000 then
         strBody (acc.push (Char.ofNat (0x10000 + ((hi - 0xD800) <<< 10) + (lo - 0xDC00)))) rest
-      else throw "unpaired surrogate"
-    else if 0xDC00 ≤ hi ∧ hi < 0xE000 then throw "unpaired surrogate"
-    else strBody (acc.push (Char.ofNat hi)) ('\\' :: 'u' :: e :: f :: g :: h :: rest)
+      else strBody (acc.push '\uFFFD') ('\\' :: 'u' :: e :: f :: g :: h :: rest)
+    else
+      let ch := if 0xDC00 ≤ hi ∧ hi < 0xE000 then '\uFFFD' else Char.ofNat hi
+      strBody (acc.push ch) ('\\' :: 'u' :: e :: f :: g :: h :: rest)
   | '\\' :: 'u' :: a :: b :: c :: d :: rest => do
     let some n := hex4 a b c d | throw "bad \\u escape"
-    if 0xD800 ≤ n ∧ n < 0xE000 then throw "unpaired surrogate"
-    strBody (acc.push (Char.ofNat n)) rest
+    -- A surrogate without its partner becomes U+FFFD, as Go's encoding/json decodes it.
+    strBody (acc.push (if 0xD800 ≤ n ∧ n < 0xE000 then '\uFFFD' else Char.ofNat n)) rest
   | '\\' :: e :: rest => do
     let c ← match e with
       | '"' => pure '"' | '\\' => pure '\\' | '/' => pure '/' | 'b' => pure '\x08'

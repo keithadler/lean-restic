@@ -21,3 +21,7 @@ root = "bench.Bench"
 [[lean_exe]]
 name = "unzstd"
 root = "test.unzstd.Main"
+
+[[lean_exe]]
+name = "jsoncheck"
+root = "test.jsoncheck.Main"
