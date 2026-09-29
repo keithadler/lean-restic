@@ -36,8 +36,10 @@ key schedule and cipher; AES-256 comes from [lean-aes](https://github.com/keitha
 SP 800-38A F.5.5 (CTR-AES256), FIPS 180-2 (SHA-256), RFC 8439 (Poly1305), HMAC-SHA256 (the widely published
 pangram example), RFC 7914 §11 (PBKDF2), restic's own Poly1305-AES vectors, and an object restic sealed in its test suite.
 
-Everything is core Lean, no Mathlib, and [Tenet](https://github.com/keithadler/tenet), an independent
-Lean kernel, re-checks every declaration.
+Everything is core Lean, no Mathlib. The theorems rest only on Lean's standard axioms (`propext`,
+`Quot.sound`, `Classical.choice`; never `native_decide`), which `test/Axioms.lean` prints, and
+[Tenet](https://github.com/keithadler/tenet), an independent Lean kernel, re-checks all 629
+declarations: 629 verified, none rejected.
 
 ## What is tested, not proved
 
