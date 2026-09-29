@@ -8,3 +8,5 @@ import Restic.SHA256
 import Restic.Base64
 import Restic.Vectors
 import Restic.Pack
+import Restic.XXH64
+import Restic.Zstd

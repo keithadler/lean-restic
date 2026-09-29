@@ -73,12 +73,13 @@ def explain : OpenError → String
 /-- Restic's unpacked format: version 1 is plain JSON; version 2 puts an encoding byte first, where
 `[` or `{` means the whole plaintext is JSON and 2 means zstd-compressed JSON. -/
 def unpacked (pt : Bytes) : Except String String := do
-  match pt with
-  | 2 :: _ => throw "compressed with zstd (repository format 2); not supported yet"
-  | _ =>
-    match String.fromUTF8? (ByteArray.mk pt.toArray) with
-    | some s => return s
-    | none => throw "the plaintext is not UTF-8"
+  let json ← match pt with
+    | 2 :: rest => Zstd.decompress (ByteArray.mk rest.toArray)
+    | 0x5b :: _ | 0x7b :: _ => pure (ByteArray.mk pt.toArray)
+    | _ => throw "unknown encoding version"
+  match String.fromUTF8? json with
+  | some s => return s
+  | none => throw "the plaintext is not UTF-8"
 
 def catFile (key : MasterKey) (path : System.FilePath) : IO Unit := do
   match openBlob key (← readBytes path) with
@@ -134,9 +135,24 @@ def check (repo : System.FilePath) (key : MasterKey) : IO UInt32 := do
     | .ok xs =>
       blobs := blobs + xs.length
       hashed := hashed + (xs.filter (·.1.rawLength.isNone)).length
+      -- Compressed blobs: decompress, then check the length and the ID (the zstd decoder is tested,
+      -- not proved; see Restic/Zstd.lean).
+      for (e, pt) in xs do
+        if let some raw := e.rawLength then
+          match Zstd.decompress (ByteArray.mk pt.toArray) with
+          | .error err =>
+            bad := bad + 1
+            IO.println s!"BAD {f}: blob {hex e.id}: zstd: {err}"
+          | .ok out =>
+            if out.size ≠ raw then
+              bad := bad + 1
+              IO.println s!"BAD {f}: blob {hex e.id}: decompresses to {out.size} bytes, header says {raw}"
+            else if sha256 out.toList ≠ e.id then
+              bad := bad + 1
+              IO.println s!"BAD {f}: blob {hex e.id}: decompressed plaintext does not hash to its ID"
+            else
+              hashed := hashed + 1
   IO.println s!"{packs - bad} of {packs} packs read ({bytes} bytes): {blobs} blobs authenticated, {hashed} of them hashed to their IDs"
-  if blobs > hashed then
-    IO.println s!"{blobs - hashed} compressed blobs: IDs not checked (zstd is not supported yet)"
   return if bad = 0 then 0 else 1
 
 def usage : String := "usage: lean-restic -r REPO --masterkey FILE cat config
