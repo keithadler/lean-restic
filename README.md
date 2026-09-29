@@ -1,5 +1,7 @@
 # lean-restic
 
+[![CI](https://github.com/keithadler/lean-restic/actions/workflows/ci.yml/badge.svg)](https://github.com/keithadler/lean-restic/actions/workflows/ci.yml)
+
 An independent reader for [restic](https://restic.net) backups, with restic's encryption and pack format
 specified and proved in Lean 4.
 
