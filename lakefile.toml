@@ -1,0 +1,15 @@
+name = "restic"
+version = "0.1.0"
+defaultTargets = ["Restic", "lean-restic"]
+
+[[require]]
+name = "aes"
+git = "https://github.com/keithadler/lean-aes"
+rev = "d85a92733d0139e1fbecc3ea00489537b6ce248c"
+
+[[lean_lib]]
+name = "Restic"
+
+[[lean_exe]]
+name = "lean-restic"
+root = "Main"

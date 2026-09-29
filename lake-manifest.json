@@ -1,0 +1,16 @@
+{"version": "1.2.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "https://github.com/keithadler/lean-aes",
+   "type": "git",
+   "subDir": null,
+   "scope": "",
+   "rev": "d85a92733d0139e1fbecc3ea00489537b6ce248c",
+   "name": "aes",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "d85a92733d0139e1fbecc3ea00489537b6ce248c",
+   "inherited": false,
+   "configFile": "lakefile.toml"}],
+ "name": "restic",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}
