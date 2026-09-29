@@ -38,8 +38,8 @@ pangram example), RFC 7914 §11 (PBKDF2), restic's own Poly1305-AES vectors, and
 
 Everything is core Lean, no Mathlib. The theorems rest only on Lean's standard axioms (`propext`,
 `Quot.sound`, `Classical.choice`; never `native_decide`), which `test/Axioms.lean` prints, and
-[Tenet](https://github.com/keithadler/tenet), an independent Lean kernel, re-checks all 629
-declarations: 629 verified, none rejected.
+[Tenet](https://github.com/keithadler/tenet), an independent Lean kernel, re-checks all 643
+declarations: 643 verified, none rejected.
 
 ## What is tested, not proved
 
