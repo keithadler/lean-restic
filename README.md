@@ -8,12 +8,15 @@ separate program, written from restic's [design document](https://github.com/res
 and the published standards, that opens your repository with your password, checks every pack, and
 restores files, where the core of what it trusts is a Lean theorem rather than a test.
 
-```
-$ lean-restic -r /srv/backup check
-12 of 12 packs read (48213177 bytes): 3108 blobs authenticated, 3108 of them hashed to their IDs
+From `test/`, on a repository restic made:
 
-$ lean-restic -r /srv/backup restore e4691693 --target /tmp/restored
-restored 207 files and 8 directories, 12001234 bytes from 223 blobs, each checked against its ID
+```
+$ lean-restic -r repo-v2 check
+4 of 4 packs read (12338350 bytes): 226 blobs authenticated, 226 of them hashed to their IDs
+
+$ lean-restic -r repo-v2 restore e4691693 --target /tmp/restored
+restored 209 files and 8 directories, 12615851 bytes from 214 blobs, each checked against its ID
+not restored (1): /src/link (symlink)
 ```
 
 ## What is proved
@@ -30,8 +33,8 @@ restored 207 files and 8 directories, 12001234 bytes from 223 blobs, each checke
 
 Known answers are theorems too, proved by the kernel evaluating the definitions: FIPS-197 (AES-128
 key schedule and cipher; AES-256 comes from [lean-aes](https://github.com/keithadler/lean-aes)),
-SP 800-38A F.5.5 (CTR-AES256), FIPS 180-2 (SHA-256), RFC 8439 (Poly1305), RFC 4231-style HMAC,
-RFC 7914 §11 (PBKDF2), restic's own Poly1305-AES vectors, and an object restic sealed in its test suite.
+SP 800-38A F.5.5 (CTR-AES256), FIPS 180-2 (SHA-256), RFC 8439 (Poly1305), HMAC-SHA256 (the widely published
+pangram example), RFC 7914 §11 (PBKDF2), restic's own Poly1305-AES vectors, and an object restic sealed in its test suite.
 
 Everything is core Lean, no Mathlib, and [Tenet](https://github.com/keithadler/tenet), an independent
 Lean kernel, re-checks every declaration.
