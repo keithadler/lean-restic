@@ -1,4 +1,5 @@
 import Restic.CTR
+import Restic.FastAES
 import Restic.Poly1305
 
 /-!
@@ -51,6 +52,24 @@ def mac (k : MasterKey) (iv ct : Bytes) : Bytes := poly1305 (k.macR ++ aes128 k.
 
 /-- AES-256-CTR under the master key's encryption key. -/
 def crypt (k : MasterKey) (iv m : Bytes) : Bytes := ctr (aes256 k.encrypt) iv m
+
+/-- `2¹²⁸`, computed once. -/
+def two128 : Nat := 2 ^ 128
+
+/-- `crypt` as it runs: the round keys are expanded once per object and each counter block goes
+straight from a number to an AES state, skipping the byte lists in between. -/
+def cryptFast (k : MasterKey) (iv m : Bytes) : Bytes :=
+  let rks := expandKey256 k.encrypt
+  let base := beNat iv
+  ctrGoK (fun j => (cipherT rks (AES.State.ofNat ((base + j) % two128))).toList) 0 [] m
+
+/-- Compiled code runs `cryptFast` for `crypt`; they are the same function. -/
+@[csimp] theorem crypt_eq_fast : @crypt = @cryptFast := by
+  funext k iv m
+  simp only [crypt, cryptFast, ctr, ctrGo_eq_ctrGoK, aes256_eq_fast, aes256Fast, aes256Keyed, stateOf,
+    ctrBlock, beNat_toBE, two128]
+  rw [show (256 : Nat) ^ 16 = 2 ^ 128 from rfl]
+  simp only [Nat.mod_mod]
 
 /-- What restic writes for plaintext `m` with IV `iv`: `IV ‖ CIPHERTEXT ‖ MAC`. -/
 def sealBlob (k : MasterKey) (iv m : Bytes) : Bytes :=

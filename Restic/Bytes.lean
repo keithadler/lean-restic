@@ -80,3 +80,20 @@ theorem toLE_leNat (bs : Bytes) : toLE bs.length (leNat bs) = bs := by
     simp [Nat.toUInt8]
 
 end Restic
+
+namespace Restic
+
+/-! ## Big-endian numbers -/
+
+theorem beNat_append_singleton (l : Bytes) (x : UInt8) : beNat (l ++ [x]) = 256 * beNat l + x.toNat := by
+  simp [beNat, List.foldl_append]
+
+theorem beNat_reverse (l : Bytes) : beNat l.reverse = leNat l := by
+  induction l with
+  | nil => rfl
+  | cons b bs ih => rw [List.reverse_cons, beNat_append_singleton, ih, leNat]; omega
+
+theorem beNat_toBE (k n : Nat) : beNat (toBE k n) = n % 256 ^ k := by
+  rw [toBE, beNat_reverse, leNat_toLE]
+
+end Restic

@@ -13,3 +13,7 @@ name = "Restic"
 [[lean_exe]]
 name = "lean-restic"
 root = "Main"
+
+[[lean_exe]]
+name = "bench"
+root = "bench.Bench"

@@ -100,4 +100,24 @@ theorem ctr_eq_xor_keystream (E : Bytes → Bytes) (hE : ∀ x, (E x).length = 1
   rw [ctr, ctrGo_eq E hE iv m 0 [] ((m.length + 15) / 16) (by simp; omega)]
   rfl
 
+/-! ## Counter mode over any keystream-block function
+
+`ctrGoK K` is `ctrGo` with the keystream block for counter `i` given directly as `K i`. It lets a fast
+implementation compute keystream blocks its own way, and `ctrGo_eq_ctrGoK` says `ctrGo` is the case
+`K i = E (ctrBlock iv i)`. -/
+
+/-- Counter mode with keystream block `i` given by `K i`. -/
+def ctrGoK (K : Nat → Bytes) : Nat → Bytes → Bytes → Bytes
+  | _, _, [] => []
+  | i, [], b :: bs =>
+    let ks := K i
+    (b ^^^ ks.headD 0) :: ctrGoK K (i + 1) ks.tail bs
+  | i, x :: xs, b :: bs => (b ^^^ x) :: ctrGoK K i xs bs
+
+theorem ctrGo_eq_ctrGoK (E : Bytes → Bytes) (iv : Bytes) (i : Nat) (buf m : Bytes) :
+    ctrGo E iv i buf m = ctrGoK (fun j => E (ctrBlock iv j)) i buf m := by
+  induction m generalizing i buf with
+  | nil => cases buf <;> rfl
+  | cons b bs ih => cases buf <;> simp [ctrGo, ctrGoK, ih]
+
 end Restic
