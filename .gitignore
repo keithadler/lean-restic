@@ -1,2 +1,3 @@
 .lake/
-/test/repo*/
+/test/repo-v*/
+/test/src/

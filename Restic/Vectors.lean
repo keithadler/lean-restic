@@ -1,4 +1,5 @@
 import Restic.Seal
+import Restic.SHA256
 
 /-!
 # Known answers, as theorems
@@ -9,6 +10,7 @@ Tenet re-derives the same facts.
 
 * FIPS-197 Appendix A.1 and C.1: the AES-128 key schedule and cipher added in `Restic.AES`.
 * NIST SP 800-38A F.5.5: CTR-AES256, four blocks.
+* FIPS 180-2 Appendix B.1 and B.2: SHA-256 of "abc" and of a two-block message, and of the empty string.
 * RFC 8439 §2.5.2: Poly1305.
 * Restic's own tests (`internal/repository/crypto/crypto_int_test.go`): the four Poly1305-AES vectors
   from Bernstein's paper, run through restic's `mac`, and a complete object restic sealed, which
@@ -44,6 +46,24 @@ theorem sp800_38a_F55 :
         (bytes 16 0xf0f1f2f3f4f5f6f7f8f9fafbfcfdfeff)
         (bytes 64 0x6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e5130c81c46a35ce411e5fbc1191a0a52eff69f2445df4f9b17ad2b417be66c3710) =
       bytes 64 0x601ec313775789a5b7a7f504bbf3d228f443e3ca4d62b59aca84e990cacaf5c52b0930daa23de94ce87017ba2d84988ddfc9c58db67aada613c2dd08457941a6 := by
+  decide +kernel
+
+/-! ## SHA-256 -/
+
+theorem sha256_empty :
+    sha256 [] = bytes 32 0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 := by
+  decide +kernel
+
+/-- FIPS 180-2 B.1: "abc". -/
+theorem fips180_B1 :
+    sha256 (bytes 3 0x616263) = bytes 32 0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad := by
+  decide +kernel
+
+/-- FIPS 180-2 B.2: "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq", 448 bits, two blocks
+after padding. -/
+theorem fips180_B2 :
+    sha256 (bytes 56 0x6162636462636465636465666465666765666768666768696768696a68696a6b696a6b6c6a6b6c6d6b6c6d6e6c6d6e6f6d6e6f706e6f7071) =
+      bytes 32 0x248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1 := by
   decide +kernel
 
 /-! ## RFC 8439 §2.5.2, Poly1305 -/
