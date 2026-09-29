@@ -4,50 +4,45 @@ import Lean.Data.Json
 /-!
 # `lean-restic`: read a restic repository with the proved definitions
 
+    lean-restic -r REPO ids
     lean-restic -r REPO --masterkey FILE cat config
     lean-restic -r REPO --masterkey FILE cat snapshot|index|lock|key ID
-    lean-restic -r REPO ids
     lean-restic -r REPO --masterkey FILE check
+    lean-restic -r REPO --masterkey FILE snapshots
+    lean-restic -r REPO --masterkey FILE ls SNAPSHOT
+    lean-restic -r REPO --masterkey FILE restore SNAPSHOT --target DIR
 
-`FILE` is the JSON that `restic cat masterkey` prints. `ids` checks that every file in the repository
-(except `config`) is named by the SHA-256 of its contents; it needs no key. `check` reads every pack
-with `readPack`: every blob and header is authenticated, the header accounts for every byte, and every
-uncompressed blob's plaintext hashes to its ID (`readPack_ok`).
+`FILE` is the JSON that `restic cat masterkey` prints.
 
-Everything that touches repository bytes is the specification in `Restic/`: `openBlob`, `sha256`,
-`Base64.decode`. The JSON of the master key file is read with Lean's own `Lean.Json`, which is not part
-of what is proved.
+* `ids`: every file in the repository (except `config`) is named by the SHA-256 of its contents.
+* `check`: reads every pack with `readPack` (every blob and header authenticated, the header accounts
+  for every byte, every uncompressed blob hashes to its ID, `readPack_ok`); compressed blobs are
+  decompressed and hashed too.
+* `restore`: writes the snapshot's files, each byte fetched by ID and checked against it
+  (`Restic/Repo.lean`). File contents and directories only: no permissions, times, or symlinks yet.
+
+The master key file is read with Lean's own `Lean.Json`; everything read from the repository goes
+through `Restic/`.
 -/
 
-open Restic
-
-def hex (bs : Bytes) : String :=
-  String.join (bs.map fun b =>
-    let d := "0123456789abcdef".toList
-    String.ofList [d.getD (b.toNat / 16) '0', d.getD (b.toNat % 16) '0'])
-
-def readBytes (path : System.FilePath) : IO Bytes := do
-  return (← IO.FS.readBinFile path).toList
-
-def b64 (j : Lean.Json) (path : List String) : Except String Bytes := do
-  let mut v := j
-  for k in path do
-    v ← v.getObjVal? k
-  let s ← v.getStr?
-  match Base64.decode s with
-  | some bs => return bs
-  | none => throw s!"{".".intercalate path} is not Base64"
+open Restic Restic.Repo
 
 def loadMasterKey (path : System.FilePath) : IO MasterKey := do
   let text ← IO.FS.readFile path
+  let b64 (j : Lean.Json) (keys : List String) : Except String Bytes := do
+    let mut v := j
+    for k in keys do v ← v.getObjVal? k
+    match Base64.decode (← v.getStr?) with
+    | some bs => return bs
+    | none => throw s!"{".".intercalate keys} is not Base64"
   let parsed : Except String MasterKey := do
     let j ← Lean.Json.parse text
     return ⟨← b64 j ["encrypt"], ← b64 j ["mac", "k"], ← b64 j ["mac", "r"]⟩
   match parsed with
   | .ok k =>
-    unless k.valid do throw (IO.userError "the master key has the wrong lengths or an all-zero part")
+    unless k.valid do fail "the master key has the wrong lengths or an all-zero part"
     return k
-  | .error e => throw (IO.userError s!"{path}: {e}")
+  | .error e => fail s!"{path}: {e}"
 
 def dirOf : String → Option String
   | "snapshot" => some "snapshots"
@@ -55,47 +50,6 @@ def dirOf : String → Option String
   | "lock" => some "locks"
   | "key" => some "keys"
   | _ => none
-
-/-- The one file in `dir` whose name starts with `id`. -/
-def findFile (dir : System.FilePath) (id : String) : IO System.FilePath := do
-  let entries ← dir.readDir
-  match entries.toList.filter (·.fileName.startsWith id) with
-  | [e] => return e.path
-  | [] => throw (IO.userError s!"no file in {dir} starts with {id}")
-  | _ => throw (IO.userError s!"more than one file in {dir} starts with {id}")
-
-def explain : OpenError → String
-  | .invalidKey => "invalid key"
-  | .tooShort => "too short to be an encrypted object"
-  | .invalidIV => "the IV is all zero"
-  | .unauthenticated => "MAC mismatch: wrong key, or the file was changed"
-
-/-- Restic's unpacked format: version 1 is plain JSON; version 2 puts an encoding byte first, where
-`[` or `{` means the whole plaintext is JSON and 2 means zstd-compressed JSON. -/
-def unpacked (pt : Bytes) : Except String String := do
-  let json ← match pt with
-    | 2 :: rest => Zstd.decompress (ByteArray.mk rest.toArray)
-    | 0x5b :: _ | 0x7b :: _ => pure (ByteArray.mk pt.toArray)
-    | _ => throw "unknown encoding version"
-  match String.fromUTF8? json with
-  | some s => return s
-  | none => throw "the plaintext is not UTF-8"
-
-def catFile (key : MasterKey) (path : System.FilePath) : IO Unit := do
-  match openBlob key (← readBytes path) with
-  | .error e => throw (IO.userError s!"{path}: {explain e}")
-  | .ok pt =>
-    match unpacked pt with
-    | .ok s => IO.println s
-    | .error e => throw (IO.userError s!"{path}: {e}")
-
-partial def filesUnder (dir : System.FilePath) : IO (Array System.FilePath) := do
-  if !(← dir.pathExists) then return #[]
-  let mut out := #[]
-  for e in ← dir.readDir do
-    if ← e.path.isDir then out := out ++ (← filesUnder e.path)
-    else out := out.push e.path
-  return out
 
 def ids (repo : System.FilePath) : IO UInt32 := do
   let mut bad := 0
@@ -112,10 +66,10 @@ def ids (repo : System.FilePath) : IO UInt32 := do
 
 def explainPack : PackError → String
   | .badHeaderLength => "the header length in the last four bytes is larger than the file"
-  | .header e => s!"header: {explain e}"
+  | .header e => s!"header: {explainOpen e}"
   | .badHeader => "the header is not a list of blob entries"
   | .lengthMismatch => "the blob lengths in the header do not add up to the file"
-  | .blob i e => s!"blob {i}: {explain e}"
+  | .blob i e => s!"blob {i}: {explainOpen e}"
   | .idMismatch i => s!"blob {i}: plaintext does not hash to its ID"
 
 def check (repo : System.FilePath) (key : MasterKey) : IO UInt32 := do
@@ -155,22 +109,59 @@ def check (repo : System.FilePath) (key : MasterKey) : IO UInt32 := do
   IO.println s!"{packs - bad} of {packs} packs read ({bytes} bytes): {blobs} blobs authenticated, {hashed} of them hashed to their IDs"
   return if bad = 0 then 0 else 1
 
-def usage : String := "usage: lean-restic -r REPO --masterkey FILE cat config
+def snapshotJson (repo : System.FilePath) (key : MasterKey) (id : String) : IO (String × Json) := do
+  let f ← findFile (repo / "snapshots") id
+  let j ← orFail f.toString (Json.parse (← openFile key f))
+  return (f.fileName.getD "", j)
+
+def snapshots (repo : System.FilePath) (key : MasterKey) : IO UInt32 := do
+  for f in ← filesUnder (repo / "snapshots") do
+    let j ← orFail f.toString (Json.parse (← openFile key f))
+    let time ← orFail f.toString (j.strField "time")
+    let host := (j.get? "hostname").bind (fun v => (Json.asStr v).toOption) |>.getD ""
+    let paths ← orFail f.toString (do (← Json.asArr (← j.field "paths")).mapM Json.asStr)
+    IO.println s!"{(f.fileName.getD "").take 8}  {time.take 19}  {host}  {", ".intercalate paths.toList}"
+  return 0
+
+def walkSnapshot (repo : System.FilePath) (key : MasterKey) (id : String) (target : Option System.FilePath)
+    (list : Bool) : IO UInt32 := do
+  let (_, j) ← snapshotJson repo key id
+  let root ← orFail "snapshot" (j.strField "tree")
+  let r ← openRepo repo key
+  if let some t := target then IO.FS.createDirAll t
+  let st ← r.walk root "" target list 1000 {}
+  unless list do
+    IO.println s!"restored {st.files} files and {st.dirs} directories, {st.bytes} bytes from {st.blobs} blobs, each checked against its ID"
+    unless st.skipped.isEmpty do
+      IO.println s!"not restored ({st.skipped.size}): {", ".intercalate st.skipped.toList}"
+  return 0
+
+def usage : String := "usage: lean-restic -r REPO ids
+       lean-restic -r REPO --masterkey FILE cat config
        lean-restic -r REPO --masterkey FILE cat snapshot|index|lock|key ID
-       lean-restic -r REPO ids
-       lean-restic -r REPO --masterkey FILE check"
+       lean-restic -r REPO --masterkey FILE check
+       lean-restic -r REPO --masterkey FILE snapshots
+       lean-restic -r REPO --masterkey FILE ls SNAPSHOT
+       lean-restic -r REPO --masterkey FILE restore SNAPSHOT --target DIR"
 
 def main (args : List String) : IO UInt32 := do
   try
     match args with
     | ["-r", repo, "ids"] => ids repo
-    | ["-r", repo, "--masterkey", mk, "check"] => check repo (← loadMasterKey mk)
-    | ["-r", repo, "--masterkey", mk, "cat", "config"] =>
-      catFile (← loadMasterKey mk) (System.FilePath.mk repo / "config"); return 0
-    | ["-r", repo, "--masterkey", mk, "cat", kind, id] =>
-      let some dir := dirOf kind | IO.eprintln usage; return 2
+    | "-r" :: repo :: "--masterkey" :: mk :: rest =>
       let key ← loadMasterKey mk
-      catFile key (← findFile (System.FilePath.mk repo / dir) id); return 0
+      match rest with
+      | ["check"] => check repo key
+      | ["cat", "config"] =>
+        IO.println (← openFile key (System.FilePath.mk repo / "config") (checkName := false)); return 0
+      | ["cat", kind, id] =>
+        let some dir := dirOf kind | IO.eprintln usage; return 2
+        IO.println (← openFile key (← findFile (System.FilePath.mk repo / dir) id) (checkName := kind ≠ "key"))
+        return 0
+      | ["snapshots"] => snapshots repo key
+      | ["ls", id] => walkSnapshot repo key id none true
+      | ["restore", id, "--target", dir] => walkSnapshot repo key id (some dir) false
+      | _ => IO.eprintln usage; return 2
     | _ => IO.eprintln usage; return 2
   catch e =>
     IO.eprintln s!"lean-restic: {e}"

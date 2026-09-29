@@ -27,4 +27,19 @@ for v in 1 2; do
   set -- $n
   if [ "$1" = "$2" ] && [ "$1" -gt 0 ]; then echo "ok   v$v check: $out"; else echo "FAIL v$v check: $out"; fail=1; fi
 done
+# Restore every snapshot with both programs and compare the trees. lean-restic restores contents and
+# directories, not symlinks, so symlinks are left out of the comparison.
+tmp=$(mktemp -d)
+for v in 1 2; do
+  r=repo-v$v
+  for f in $r/snapshots/*; do
+    id=$(basename "$f"); short=$(printf %.8s "$id")
+    $B -r $r --masterkey $r/masterkey.json restore $id --target $tmp/lean-$v-$short >/dev/null
+    restic -q -r $r restore $id --target $tmp/restic-$v-$short >/dev/null
+    find $tmp/restic-$v-$short -type l -delete
+    if diff -r $tmp/lean-$v-$short $tmp/restic-$v-$short >/dev/null; then echo "ok   v$v restore $short = restic restore"
+    else echo "FAIL v$v restore $short differs from restic restore"; fail=1; fi
+  done
+done
+rm -rf "$tmp"
 exit $fail

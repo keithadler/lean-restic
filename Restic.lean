@@ -10,3 +10,5 @@ import Restic.Vectors
 import Restic.Pack
 import Restic.XXH64
 import Restic.Zstd
+import Restic.Json
+import Restic.Repo
