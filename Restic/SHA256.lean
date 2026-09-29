@@ -107,6 +107,32 @@ def wordBytes (w : UInt32) : Bytes := toBE 4 w.toNat
 def Regs.bytes (r : Regs) : Bytes :=
   [r.a, r.b, r.c, r.d, r.e, r.f, r.g, r.h].flatMap wordBytes
 
+/-! ### Array lookups
+
+`word` indexes the block list, walking from its head for every byte. `compressFast` converts the block
+to an array once. `compress_eq_fast` proves nothing else changes, and `@[csimp]` swaps it in. -/
+
+/-- `word`, reading from an array. -/
+def wordA (a : Array UInt8) (i : Nat) : UInt32 :=
+  let b (j : Nat) : UInt32 := (a.getD (4 * i + j) 0).toUInt32
+  (b 0 <<< 24) ||| (b 1 <<< 16) ||| (b 2 <<< 8) ||| b 3
+
+theorem getElem?_getD_eq (l : Bytes) (k : Nat) : l[k]?.getD 0 = if h : k < l.length then l[k] else 0 := by
+  split <;> simp_all
+
+theorem word_eq_wordA (block : Bytes) (i : Nat) : word block i = wordA block.toArray i := by
+  simp [word, wordA, Array.getD, List.getD_eq_getElem?_getD, getElem?_getD_eq]
+
+def compressFast (hv : Regs) (block : Bytes) : Regs :=
+  let a := block.toArray
+  let w := (List.range 16).map (wordA a)
+  hv.add ((List.zip K (w ++ extend 48 w)).foldl (fun s kw => round s kw.1 kw.2) hv)
+
+@[csimp] theorem compress_eq_fast : @compress = @compressFast := by
+  funext hv block
+  have hw : word block = wordA block.toArray := funext (word_eq_wordA block)
+  simp only [compress, compressFast, schedule, hw]
+
 end SHA256
 
 open SHA256 in

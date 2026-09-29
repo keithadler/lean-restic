@@ -97,3 +97,34 @@ theorem beNat_toBE (k n : Nat) : beNat (toBE k n) = n % 256 ^ k := by
   rw [toBE, beNat_reverse, leNat_toLE]
 
 end Restic
+
+namespace Restic
+
+theorem leNat_append (xs ys : Bytes) : leNat (xs ++ ys) = leNat xs + 2 ^ (8 * xs.length) * leNat ys := by
+  induction xs with
+  | nil => simp [leNat]
+  | cons x xs ih =>
+    simp only [List.cons_append, leNat, ih, List.length_cons]
+    rw [show 8 * (xs.length + 1) = 8 * xs.length + 8 by omega, Nat.pow_add]
+    grind
+
+end Restic
+
+namespace Restic
+
+/-- `leNat` four bytes at a time: each group of four is combined in a machine-sized number, so there is
+one big-number step per four bytes instead of per byte. -/
+def leNatFast : Bytes → Nat
+  | [] => 0
+  | [b0] => b0.toNat
+  | [b0, b1] => b0.toNat + 256 * b1.toNat
+  | [b0, b1, b2] => b0.toNat + 256 * b1.toNat + 65536 * b2.toNat
+  | b0 :: b1 :: b2 :: b3 :: rest =>
+    (b0.toNat + 256 * b1.toNat + 65536 * b2.toNat + 16777216 * b3.toNat) + 4294967296 * leNatFast rest
+
+/-- Compiled code runs `leNatFast` for `leNat`; they are the same function. -/
+@[csimp] theorem leNat_eq_fast : @leNat = @leNatFast := by
+  funext bs
+  induction bs using leNatFast.induct <;> simp only [leNat, leNatFast] <;> grind
+
+end Restic

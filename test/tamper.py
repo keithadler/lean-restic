@@ -25,13 +25,13 @@ with tempfile.TemporaryDirectory() as tmp:
         spots = {0, 1, 15, 16, 17, hdr - 17, hdr - 1, hdr, hdr + 15, hdr + 16, size - 20, size - 17, size - 5,
                  size - 4, size - 1} | {random.randrange(size) for _ in range(8)}
         for pos in sorted(p for p in spots if 0 <= p < size):
+            # A repository holding only the changed pack: `check` reads data/ and nothing else.
             copy = os.path.join(tmp, "repo")
             shutil.rmtree(copy, ignore_errors=True)
-            shutil.copytree(repo, copy)
             target = os.path.join(copy, os.path.relpath(pack, repo))
+            os.makedirs(os.path.dirname(target))
             b = bytearray(data)
             b[pos] ^= 0x01
-            os.chmod(target, 0o644)  # restic writes packs read-only
             open(target, "wb").write(b)
             r = subprocess.run([exe, "-r", copy, "--masterkey", key, "check"], capture_output=True, text=True)
             tried += 1

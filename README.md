@@ -28,7 +28,7 @@ not restored (1): /src/link (symlink)
 | `ctr_eq_xor_keystream`, `ctr_ctr` | Counter mode is SP 800-38A's definition and undoes itself. |
 | `parseHeader_encodeHeader`, `encodeHeader_of_parseHeader` | A pack header has exactly one reading: the parser and the encoder are inverse, and no byte is ignored. |
 | `readPack_ok` | When a pack reads, it is exactly the sealed blobs laid end to end, then the sealed header listing them, then its length, and every uncompressed blob hashes to its ID. |
-| `aes256_eq_fast`, `crypt_eq_fast` | The fast AES (round keys once, table lookups) and fast counter mode that the program runs are the specification, swapped in with `@[csimp]`. |
+| `aes256_eq_fast`, `crypt_eq_fast`, `poly1305_eq_fast`, `compress_eq_fast`, `leNat_eq_fast` | The faster forms the program actually runs (AES with round keys once and table lookups, counter mode without byte lists, Poly1305 a chunk at a time, SHA-256 with array lookups, little-endian decoding four bytes at a time) are the specification, swapped in with `@[csimp]`. |
 | `leNat_toLE`, `toLE_leNat`, `beNat_toBE` | Byte-order encodings are inverse. |
 
 Known answers are theorems too, proved by the kernel evaluating the definitions: FIPS-197 (AES-128
@@ -85,8 +85,11 @@ without either, the password is read from `RESTIC_PASSWORD`, as restic reads it.
 
 * **Local repositories only.** For S3, B2, Wasabi or SFTP, point it at a local copy or an
   `rclone mount`.
-* **Slow.** About 1 MB/s: the proved code works on lists. Checking a large repository means hours; a
-  proved-equal array implementation is the next step. Unlocking takes a few seconds (scrypt).
+* **Slow.** `check` runs at under 1 MB/s (15 seconds for the 12 MB test repository): the proved code
+  works on lists. The program already runs faster forms of AES, counter mode, Poly1305, SHA-256 and
+  byte decoding, each proved equal to its specification and swapped in with `@[csimp]`, but checking a
+  large repository still means hours. Proved-equal byte-array code is the next step. Unlocking takes a
+  few seconds (scrypt).
 * **Restore writes file contents and directories.** Not yet permissions, times, ownership, symlinks or
   special files; `restore` lists what it skipped.
 * Repository formats 1 and 2, tested with restic 0.19.1. No dictionaries in zstd frames (restic writes none).

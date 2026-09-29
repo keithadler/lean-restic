@@ -151,7 +151,7 @@ KEY is --password-file FILE or --masterkey FILE; without one, the password is re
 def getKey (repo : System.FilePath) : List String → IO (MasterKey × List String)
   | "--masterkey" :: f :: rest => return (← loadMasterKey f, rest)
   | "--password-file" :: f :: rest => do
-    let pw := (← IO.FS.readFile f).trimRight
+    let pw := (← IO.FS.readFile f).trimAsciiEnd.toString
     return (← unlock repo pw.toUTF8.toList, rest)
   | rest => do
     match ← IO.getEnv "RESTIC_PASSWORD" with
