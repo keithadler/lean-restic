@@ -5,14 +5,15 @@ import Lean.Data.Json
 # `lean-restic`: read a restic repository with the proved definitions
 
     lean-restic -r REPO ids
-    lean-restic -r REPO --masterkey FILE cat config
-    lean-restic -r REPO --masterkey FILE cat snapshot|index|lock|key ID
-    lean-restic -r REPO --masterkey FILE check
-    lean-restic -r REPO --masterkey FILE snapshots
-    lean-restic -r REPO --masterkey FILE ls SNAPSHOT
-    lean-restic -r REPO --masterkey FILE restore SNAPSHOT --target DIR
+    lean-restic -r REPO [KEY] cat config
+    lean-restic -r REPO [KEY] cat snapshot|index|lock|key ID
+    lean-restic -r REPO [KEY] check
+    lean-restic -r REPO [KEY] snapshots
+    lean-restic -r REPO [KEY] ls SNAPSHOT
+    lean-restic -r REPO [KEY] restore SNAPSHOT --target DIR
 
-`FILE` is the JSON that `restic cat masterkey` prints.
+The key comes from the password, as restic takes it (`--password-file FILE` or `RESTIC_PASSWORD`),
+unlocked with scrypt from a key file; or from `--masterkey FILE`, the JSON `restic cat masterkey` prints.
 
 * `ids`: every file in the repository (except `config`) is named by the SHA-256 of its contents.
 * `check`: reads every pack with `readPack` (every blob and header authenticated, the header accounts
@@ -137,19 +138,32 @@ def walkSnapshot (repo : System.FilePath) (key : MasterKey) (id : String) (targe
   return 0
 
 def usage : String := "usage: lean-restic -r REPO ids
-       lean-restic -r REPO --masterkey FILE cat config
-       lean-restic -r REPO --masterkey FILE cat snapshot|index|lock|key ID
-       lean-restic -r REPO --masterkey FILE check
-       lean-restic -r REPO --masterkey FILE snapshots
-       lean-restic -r REPO --masterkey FILE ls SNAPSHOT
-       lean-restic -r REPO --masterkey FILE restore SNAPSHOT --target DIR"
+       lean-restic -r REPO [KEY] cat config
+       lean-restic -r REPO [KEY] cat snapshot|index|lock|key ID
+       lean-restic -r REPO [KEY] check
+       lean-restic -r REPO [KEY] snapshots
+       lean-restic -r REPO [KEY] ls SNAPSHOT
+       lean-restic -r REPO [KEY] restore SNAPSHOT --target DIR
+KEY is --password-file FILE or --masterkey FILE; without one, the password is read from RESTIC_PASSWORD"
+
+/-- The master key: from `--masterkey FILE`, or from the password in `--password-file FILE` or
+`RESTIC_PASSWORD`, as restic takes it. -/
+def getKey (repo : System.FilePath) : List String → IO (MasterKey × List String)
+  | "--masterkey" :: f :: rest => return (← loadMasterKey f, rest)
+  | "--password-file" :: f :: rest => do
+    let pw := (← IO.FS.readFile f).trimRight
+    return (← unlock repo pw.toUTF8.toList, rest)
+  | rest => do
+    match ← IO.getEnv "RESTIC_PASSWORD" with
+    | some pw => return (← unlock repo pw.toUTF8.toList, rest)
+    | none => fail "no key: give --masterkey FILE or --password-file FILE, or set RESTIC_PASSWORD"
 
 def main (args : List String) : IO UInt32 := do
   try
     match args with
     | ["-r", repo, "ids"] => ids repo
-    | "-r" :: repo :: "--masterkey" :: mk :: rest =>
-      let key ← loadMasterKey mk
+    | "-r" :: repo :: rest =>
+      let (key, rest) ← getKey repo rest
       match rest with
       | ["check"] => check repo key
       | ["cat", "config"] =>

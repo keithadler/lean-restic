@@ -27,6 +27,14 @@ for v in 1 2; do
   set -- $n
   if [ "$1" = "$2" ] && [ "$1" -gt 0 ]; then echo "ok   v$v check: $out"; else echo "FAIL v$v check: $out"; fail=1; fi
 done
+# Unlock with the password (scrypt over a key file) and get the same config as with the master key.
+for v in 1 2; do
+  r=repo-v$v
+  same "v$v password unlock" "$($B -r $r cat config | norm)" "$($B -r $r --masterkey $r/masterkey.json cat config | norm)"
+  if RESTIC_PASSWORD=wrong $B -r $r cat config >/dev/null 2>&1; then echo "FAIL v$v wrong password accepted"; fail=1
+  else echo "ok   v$v wrong password refused"; fi
+done
+
 # Restore every snapshot with both programs and compare the trees. lean-restic restores contents and
 # directories, not symlinks, so symlinks are left out of the comparison.
 tmp=$(mktemp -d)

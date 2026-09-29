@@ -25,3 +25,7 @@ root = "test.unzstd.Main"
 [[lean_exe]]
 name = "jsoncheck"
 root = "test.jsoncheck.Main"
+
+[[lean_exe]]
+name = "vectors"
+root = "test.vectors.Main"

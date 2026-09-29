@@ -9,6 +9,7 @@ def timeIt (label : String) (bytes : Nat) (act : Unit → IO Nat) : IO Unit := d
   IO.println s!"{label}: {ms} ms for {bytes} bytes ({if ms = 0 then 0 else bytes * 1000 / ms / 1024} KiB/s) [{r}]"
 
 def main : IO Unit := do
+  timeIt "scrypt N=32768 r=8 p=1" 0 fun _ => return ((scrypt [1,2,3] [4,5,6] 32768 8 1 64).headD 0).toNat
   let n := 1 <<< 18
   let m : Bytes := (List.range n).map (·.toUInt8)
   let key := bytes 32 0x603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4

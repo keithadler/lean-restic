@@ -1,5 +1,6 @@
 import Restic.Seal
 import Restic.SHA256
+import Restic.Scrypt
 
 /-!
 # Known answers, as theorems
@@ -12,6 +13,8 @@ Tenet re-derives the same facts.
 * NIST SP 800-38A F.5.5: CTR-AES256, four blocks.
 * FIPS 180-2 Appendix B.1 and B.2: SHA-256 of "abc" and of a two-block message, and of the empty string.
 * RFC 8439 §2.5.2: Poly1305.
+* HMAC-SHA256 of the pangram under key "key"; PBKDF2-HMAC-SHA256 from RFC 7914 §11. (scrypt's
+  vectors, RFC 7914 §12, are too large for kernel evaluation; `test/vectors` checks them compiled.)
 * Restic's own tests (`internal/repository/crypto/crypto_int_test.go`): the four Poly1305-AES vectors
   from Bernstein's paper, run through restic's `mac`, and a complete object restic sealed, which
   `openBlob` opens to the ASCII bytes of "Dies ist ein Test!".
@@ -64,6 +67,21 @@ after padding. -/
 theorem fips180_B2 :
     sha256 (bytes 56 0x6162636462636465636465666465666765666768666768696768696a68696a6b696a6b6c6a6b6c6d6b6c6d6e6c6d6e6f6d6e6f706e6f7071) =
       bytes 32 0x248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1 := by
+  decide +kernel
+
+/-! ## HMAC, PBKDF2 and scrypt -/
+
+/-- HMAC-SHA256 with key "key" of "The quick brown fox jumps over the lazy dog". -/
+theorem hmac_pangram :
+    hmacSha256 (bytes 3 0x6b6579)
+        (bytes 43 0x54686520717569636b2062726f776e20666f78206a756d7073206f76657220746865206c617a7920646f67) =
+      bytes 32 0xf7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8 := by
+  decide +kernel
+
+/-- RFC 7914 §11: PBKDF2-HMAC-SHA256 of "passwd" with salt "salt", one iteration, 64 bytes. -/
+theorem rfc7914_11 :
+    pbkdf2 (bytes 6 0x706173737764) (bytes 4 0x73616c74) 1 64 =
+      bytes 64 0x55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc49ca9cccf179b645991664b39d77ef317c71b845b1e30bd509112041d3a19783 := by
   decide +kernel
 
 /-! ## RFC 8439 §2.5.2, Poly1305 -/

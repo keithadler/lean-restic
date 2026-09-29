@@ -1,6 +1,8 @@
 import Restic.Pack
 import Restic.Zstd
 import Restic.Json
+import Restic.Scrypt
+import Restic.Base64
 import Std.Data.HashMap
 
 /-!
@@ -196,5 +198,50 @@ def Repo.walk (r : Repo) (id : String) (path : String) (target : Option System.F
         if list then IO.println s!"{p}  ({ty}, not restored)"
         st := { st with skipped := st.skipped.push s!"{p} ({ty})" }
     return st
+
+/-! ## Unlocking with a password
+
+A key file (design.rst, "Keys, Encryption and MAC") holds scrypt parameters, a salt, and the master key
+sealed under a key derived from the password: scrypt gives 64 bytes, the first 32 the AES-256 key, the
+last 32 the MAC key `k ‖ r`. Opening the sealed data authenticates the password: a wrong one fails the
+MAC. -/
+
+def b64Field (j : Json) (k : String) : Except String Bytes := do
+  match Base64.decode (← j.strField k) with
+  | some bs => pure bs
+  | none => throw s!"{k} is not Base64"
+
+/-- Try one key file with the password. -/
+def tryKeyFile (path : System.FilePath) (password : Bytes) : IO (Option MasterKey) := do
+  let data ← readBytes path
+  if hex (sha256 data) ≠ path.fileName.getD "" then fail s!"{path}: contents do not hash to the file name"
+  let some text := String.fromUTF8? (ByteArray.mk data.toArray) | fail s!"{path}: not UTF-8"
+  let j ← orFail path.toString (Json.parse text)
+  let (kdf, n, r, p, salt, sealed) ← orFail path.toString (do
+    pure (← j.strField "kdf", ← j.natField "N", ← j.natField "r", ← j.natField "p",
+      ← b64Field j "salt", ← b64Field j "data"))
+  unless kdf = "scrypt" do fail s!"{path}: unknown key derivation {kdf}"
+  if n < 2 ∨ n &&& (n - 1) ≠ 0 ∨ r = 0 ∨ p = 0 ∨ n * r > 1 <<< 24 ∨ p > 64 then
+    fail s!"{path}: unreasonable scrypt parameters N={n} r={r} p={p}"
+  let dk := scrypt password salt n r p 64
+  let userKey : MasterKey := ⟨dk.take 32, (dk.drop 32).take 16, dk.drop 48⟩
+  match openBlob userKey sealed with
+  | .error _ => return none
+  | .ok pt =>
+    let some mtext := String.fromUTF8? (ByteArray.mk pt.toArray) | fail s!"{path}: master key is not UTF-8"
+    let mj ← orFail path.toString (Json.parse mtext)
+    let mk ← orFail path.toString (do
+      let mac ← mj.field "mac"
+      pure (⟨← b64Field mj "encrypt", ← b64Field mac "k", ← b64Field mac "r"⟩ : MasterKey))
+    unless mk.valid do fail s!"{path}: the master key has the wrong lengths or an all-zero part"
+    return some mk
+
+/-- The master key, from the first key file the password opens. -/
+def unlock (root : System.FilePath) (password : Bytes) : IO MasterKey := do
+  let files ← filesUnder (root / "keys")
+  if files.isEmpty then fail "the repository has no key files"
+  for f in files do
+    if let some mk ← tryKeyFile f password then return mk
+  fail "wrong password: no key file opens with it"
 
 end Restic.Repo
