@@ -7,9 +7,12 @@ import Lean.Data.Json
     lean-restic -r REPO --masterkey FILE cat config
     lean-restic -r REPO --masterkey FILE cat snapshot|index|lock|key ID
     lean-restic -r REPO ids
+    lean-restic -r REPO --masterkey FILE check
 
 `FILE` is the JSON that `restic cat masterkey` prints. `ids` checks that every file in the repository
-(except `config`) is named by the SHA-256 of its contents; it needs no key.
+(except `config`) is named by the SHA-256 of its contents; it needs no key. `check` reads every pack
+with `readPack`: every blob and header is authenticated, the header accounts for every byte, and every
+uncompressed blob's plaintext hashes to its ID (`readPack_ok`).
 
 Everything that touches repository bytes is the specification in `Restic/`: `openBlob`, `sha256`,
 `Base64.decode`. The JSON of the master key file is read with Lean's own `Lean.Json`, which is not part
@@ -106,14 +109,46 @@ def ids (repo : System.FilePath) : IO UInt32 := do
   IO.println s!"{n - bad} of {n} files are named by the SHA-256 of their contents"
   return if bad = 0 then 0 else 1
 
+def explainPack : PackError → String
+  | .badHeaderLength => "the header length in the last four bytes is larger than the file"
+  | .header e => s!"header: {explain e}"
+  | .badHeader => "the header is not a list of blob entries"
+  | .lengthMismatch => "the blob lengths in the header do not add up to the file"
+  | .blob i e => s!"blob {i}: {explain e}"
+  | .idMismatch i => s!"blob {i}: plaintext does not hash to its ID"
+
+def check (repo : System.FilePath) (key : MasterKey) : IO UInt32 := do
+  let mut bad := 0
+  let mut packs := 0
+  let mut blobs := 0
+  let mut hashed := 0
+  let mut bytes := 0
+  for f in ← filesUnder (repo / "data") do
+    packs := packs + 1
+    let data ← readBytes f
+    bytes := bytes + data.length
+    match readPack key data with
+    | .error e =>
+      bad := bad + 1
+      IO.println s!"BAD {f}: {explainPack e}"
+    | .ok xs =>
+      blobs := blobs + xs.length
+      hashed := hashed + (xs.filter (·.1.rawLength.isNone)).length
+  IO.println s!"{packs - bad} of {packs} packs read ({bytes} bytes): {blobs} blobs authenticated, {hashed} of them hashed to their IDs"
+  if blobs > hashed then
+    IO.println s!"{blobs - hashed} compressed blobs: IDs not checked (zstd is not supported yet)"
+  return if bad = 0 then 0 else 1
+
 def usage : String := "usage: lean-restic -r REPO --masterkey FILE cat config
        lean-restic -r REPO --masterkey FILE cat snapshot|index|lock|key ID
-       lean-restic -r REPO ids"
+       lean-restic -r REPO ids
+       lean-restic -r REPO --masterkey FILE check"
 
 def main (args : List String) : IO UInt32 := do
   try
     match args with
     | ["-r", repo, "ids"] => ids repo
+    | ["-r", repo, "--masterkey", mk, "check"] => check repo (← loadMasterKey mk)
     | ["-r", repo, "--masterkey", mk, "cat", "config"] =>
       catFile (← loadMasterKey mk) (System.FilePath.mk repo / "config"); return 0
     | ["-r", repo, "--masterkey", mk, "cat", kind, id] =>

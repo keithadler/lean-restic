@@ -45,3 +45,38 @@ theorem xor_xor_cancel_right (a b : UInt8) : a ^^^ b ^^^ b = a := by
   rw [UInt8.xor_assoc, UInt8.xor_self, UInt8.xor_zero]
 
 end Restic
+
+namespace Restic
+
+/-! ## Little-endian numbers: encoding and decoding are inverse -/
+
+theorem toNat_ofNat8 (n : Nat) : (UInt8.ofNat n).toNat = n % 256 := Nat.add_zero _
+
+theorem leNat_toLE (k n : Nat) : leNat (toLE k n) = n % 256 ^ k := by
+  induction k generalizing n with
+  | zero => simp [toLE, leNat, Nat.mod_one]
+  | succ k ih =>
+    simp only [toLE, leNat, ih, Nat.toUInt8, toNat_ofNat8, Nat.pow_succ']
+    rw [Nat.mod_mul]
+    omega
+
+theorem leNat_lt (bs : Bytes) : leNat bs < 256 ^ bs.length := by
+  induction bs with
+  | nil => simp [leNat]
+  | cons b bs ih =>
+    simp only [leNat, List.length_cons, Nat.pow_succ']
+    have := b.toNat_lt
+    omega
+
+theorem toLE_leNat (bs : Bytes) : toLE bs.length (leNat bs) = bs := by
+  induction bs with
+  | nil => rfl
+  | cons b bs ih =>
+    simp only [List.length_cons, toLE, leNat]
+    have hb := b.toNat_lt
+    have h1 : (b.toNat + 256 * leNat bs) % 256 = b.toNat := by omega
+    have h2 : (b.toNat + 256 * leNat bs) / 256 = leNat bs := by omega
+    rw [h1, h2, ih]
+    simp [Nat.toUInt8]
+
+end Restic

@@ -6,3 +6,4 @@ import Restic.Seal
 import Restic.SHA256
 import Restic.Base64
 import Restic.Vectors
+import Restic.Pack
