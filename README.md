@@ -87,7 +87,7 @@ without either, the password is read from `RESTIC_PASSWORD`, as restic reads it.
   proved-equal array implementation is the next step. Unlocking takes a few seconds (scrypt).
 * **Restore writes file contents and directories.** Not yet permissions, times, ownership, symlinks or
   special files; `restore` lists what it skipped.
-* Repository formats 1 and 2 (restic 0.8 to 0.19). No dictionaries in zstd frames (restic writes none).
+* Repository formats 1 and 2, tested with restic 0.19.1. No dictionaries in zstd frames (restic writes none).
 
 ## Layout
 
