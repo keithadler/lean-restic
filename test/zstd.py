@@ -8,7 +8,7 @@ decoder never crashes or hangs: it must either refuse or, if it accepts, zstd mu
 import os, random, subprocess, sys, tempfile
 
 here = os.path.dirname(os.path.abspath(__file__))
-exe = os.path.join(here, "..", ".lake", "build", "bin", "unzstd")
+exe = os.environ.get("UNZSTD") or os.path.join(here, "..", ".lake", "build", "bin", "unzstd")
 random.seed(int(os.environ.get("SEED", "7")))
 
 def inputs():
@@ -45,6 +45,10 @@ with tempfile.TemporaryDirectory() as tmp:
             else:
                 bad += 1
                 print(f"FAIL {name} {' '.join(cfg)}: {r.stderr.decode().strip() or 'output differs'}")
+                if os.environ.get("KEEP"):
+                    tag = f"fail-{bad}"
+                    open(os.path.join(here, tag + ".raw"), "wb").write(data)
+                    open(os.path.join(here, tag + ".zst"), "wb").write(open(comp, "rb").read())
             frames.append(open(comp, "rb").read())
     print(f"{ok} of {ok + bad} frames decoded exactly")
     # Corruption: flip bytes; the decoder must refuse or agree with zstd, and never crash.
